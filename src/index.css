@@ -1,14 +1,135 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Devanagari:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "Noto Sans Devanagari", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --font-display: "Space Grotesk", sans-serif;
+  --font-display: "Space Grotesk", "Noto Sans Devanagari", sans-serif;
 }
 
 body {
   font-family: var(--font-sans);
   background-color: #f8fafc;
   color: #0f172a;
+}
+
+/* HIGH-FIDELITY PRINT & PDF MEDIA OVERRIDES */
+@media print {
+  /* 1. Global Page Margins & Sizes Optimized for Professional Business Reports */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+
+  /* 2. Strict Display Normalization for Print Ingress */
+  body, html {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    line-height: 1.65 !important; /* Elegant vertical rhythm allowing Hindi vowel symbols and top lines (Shirorekha) to fit without overlaps */
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 3. Force Full-Width Block-Level Flow for Column Grids (Preventing Horizontal Truncation) */
+  main, 
+  [class*="max-w-"], 
+  .grid, 
+  [class*="grid-cols"] {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+
+  /* 4. Column overrides so sections do not squish */
+  section, 
+  aside,
+  .col-span-7, 
+  [class*="col-span"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    display: block !important;
+    float: none !important;
+    margin: 0 0 1.5rem 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 5. Smart Elements Split Prevention (Preventing Bad Cuts across Printed Pages) */
+  .p-5, .p-6, .bg-white, table, tr, li, blockquote, .shadow-sm, .rounded-xl, .border {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    box-shadow: none !important;
+    border-radius: 6px !important;
+    border-color: #94a3b8 !important; /* High contrast gray border for crisp visibility on paper */
+  }
+
+  /* 6. Typography Formatting for Outstanding Paper Readability */
+  h1, h2, h3, h4, h5, h6 {
+    color: #000000 !important;
+    font-family: var(--font-display), "Space Grotesk", sans-serif !important;
+    font-weight: 700 !important;
+    page-break-after: avoid !important; /* Strictly avoid orphan headings at the bottom of pages */
+    break-after: avoid !important;
+    margin-top: 1rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  p, span, li, a, td, th, div, label {
+    font-family: var(--font-sans), "Inter", sans-serif !important;
+    color: #111827 !important;
+  }
+
+  /* Enhance spacing in blockquotes */
+  blockquote {
+    padding-left: 1rem !important;
+    border-left: 3px solid #1e3a8a !important;
+    font-style: italic !important;
+    color: #1f2937 !important;
+  }
+
+  /* 7. Hide completely useless components during Print (headers, inputs, tabs, triggers) */
+  .print\:hidden,
+  [class*="print:hidden"],
+  nav,
+  header,
+  aside.print\:hidden,
+  button,
+  select,
+  input,
+  textarea,
+  .inline-flex.rounded-md {
+    display: none !important;
+  }
+
+  /* Ensure correct alignment for Hindi text and paragraphs */
+  p, .text-slate-600, .text-slate-700 {
+    text-align: justify !important;
+    text-justify: inter-word !important;
+  }
+
+  /* Elegant print-only fixed header for version control */
+  .v-control-print {
+    position: fixed !important;
+    top: -8mm !important;
+    right: 0 !important;
+    font-size: 8pt !important;
+    font-family: var(--font-mono), monospace !important;
+    color: #475569 !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    padding-bottom: 4px !important;
+    border-bottom: 1px dashed #94a3b8 !important;
+    z-index: 9999 !important;
+    display: block !important;
+  }
 }

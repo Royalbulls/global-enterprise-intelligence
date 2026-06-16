@@ -9,6 +9,10 @@ export interface BusinessInput {
   fundingRequirement: string;
   targetGoal?: string;
   additionalDetails?: string;
+  knownCompetitors?: string;
+  marketScope?: string; // e.g. Local, City-wide, Regional, National, Global
+  firstMoverStatus?: string; // e.g. First-Mover, Moderate, Highly Saturated
+  businessOfferings?: string; // Core Products/Services offered
 }
 
 export interface HealthScoreBreakdown {
@@ -16,6 +20,7 @@ export interface HealthScoreBreakdown {
   marketPosition: number;
   operationalStability: number;
   fundingReadiness: number;
+  scoreCalculationExplanation?: string;
 }
 
 export interface GrowthOpportunity {
@@ -75,6 +80,12 @@ export interface IndiaScheme {
   benefits: string;
 }
 
+export interface ExternalResourceLink {
+  title: string;
+  url: string;
+  description: string;
+}
+
 export interface CompetitorItem {
   name: string;
   pricingStrategy: string;
@@ -86,6 +97,10 @@ export interface CompetitorItem {
 export interface CompetitorAnalysis {
   competitors: CompetitorItem[];
   competitiveAdvantageTactics: string[];
+  marketSaturationScore?: number; // 0-100 indicating saturation level
+  firstMoverFeasibilityNotes?: string; // Analysis of scope or first-mover advantage
+  howPlayersArePerforming?: string; // Rich brief on how existing players operate
+  industryBenchmarksLinks?: ExternalResourceLink[]; // Links to useful external websites for validation
 }
 
 export interface InvestorReadiness {
@@ -264,4 +279,5 @@ export interface AdviceReport {
   boardroomBrief?: BoardroomBrief;
   indiaMarketSpecifics?: IndiaMarketSpecifics;
   globalSaaSFeatures?: GlobalSaaSFeatures;
+  scoreTransparencyExplanation?: string;
 }

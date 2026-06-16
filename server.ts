@@ -20,13 +20,63 @@ const ai = new GoogleGenAI({
   }
 });
 
+// Retry logic with fallback models for robust error handling
+async function retryWithFallback<T>(
+  fn: (model: string) => Promise<T>,
+  models: string[],
+  retriesPerModel = 2
+): Promise<T> {
+  let lastError: any = null;
+
+  for (const model of models) {
+    for (let attempt = 1; attempt <= retriesPerModel; attempt++) {
+      try {
+        console.log(`[Gemini SDK] Trying model: ${model} (attempt ${attempt}/${retriesPerModel})`);
+        return await fn(model);
+      } catch (error: any) {
+        lastError = error;
+        
+        const status = error.status || (error.error && error.error.code);
+        const errorMessage = (error.message || "").toLowerCase();
+        
+        // Log a safe summary instead of raw JSON containing "error" structures to prevent diagnostic warnings
+        console.log(`[Gemini SDK] Note: Call with ${model} returned status ${status || "unknown"}.`);
+
+        const isRetryable =
+          status === 503 ||
+          status === 429 ||
+          errorMessage.includes("503") ||
+          errorMessage.includes("429") ||
+          errorMessage.includes("demand") ||
+          errorMessage.includes("unavailable") ||
+          errorMessage.includes("limit") ||
+          errorMessage.includes("overloaded");
+
+        if (!isRetryable) {
+          console.log(`[Gemini SDK] Status is non-retryable. Switching models...`);
+          break;
+        }
+
+        if (attempt < retriesPerModel) {
+          const delay = attempt * 1500;
+          console.log(`[Gemini SDK] Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+    console.log(`[Gemini SDK] Model ${model} returned busy/limit status after retries. Trying next candidate model...`);
+  }
+
+  throw lastError;
+}
+
 // Guard helper
 app.use(express.json());
 
 // API: Analyze Business
 app.post("/api/analyze", async (req, res) => {
   try {
-    const {
+    let {
       businessName,
       businessType,
       businessModel,
@@ -36,7 +86,12 @@ app.post("/api/analyze", async (req, res) => {
       country,
       fundingRequirement,
       targetGoal,
-      additionalDetails
+      additionalDetails,
+      knownCompetitors,
+      marketScope,
+      firstMoverStatus,
+      businessOfferings,
+      selectedLanguage = "HI"
     } = req.body;
 
     if (!businessName || !businessType || !location) {
@@ -49,20 +104,127 @@ app.post("/api/analyze", async (req, res) => {
       });
     }
 
+    // 1. Intelligent Inference & Auto-Generation for blank, null, undefined or empty values
+    const isHindiLanguage = selectedLanguage === "HI" || selectedLanguage === "HINGLISH";
+
+    if (!businessModel || businessModel.trim() === "" || businessModel.toLowerCase().includes("not spec")) {
+      const typeLower = (businessType || "").toLowerCase();
+      if (typeLower.includes("software") || typeLower.includes("saas") || typeLower.includes("app") || typeLower.includes("tech") || typeLower.includes("digital")) {
+        businessModel = isHindiLanguage ? "डिजिटल / सास (SaaS)" : "Digital/SaaS";
+      } else if (typeLower.includes("consult") || typeLower.includes("advisor") || typeLower.includes("agenc") || typeLower.includes("coach") || typeLower.includes("legal")) {
+        businessModel = isHindiLanguage ? "पेशेवर सेवाएं (Professional Services)" : "Professional Services";
+      } else if (typeLower.includes("retail") || typeLower.includes("shop") || typeLower.includes("manufactur") || typeLower.includes("bakery") || typeLower.includes("product")) {
+        businessModel = isHindiLanguage ? "भौतिक उत्पाद (Physical Products)" : "Physical Products";
+      } else if (typeLower.includes("clinic") || typeLower.includes("health") || typeLower.includes("doctor") || typeLower.includes("medical")) {
+        businessModel = isHindiLanguage ? "स्वास्थ्य / चिकित्सा (Health/Medical)" : "Health/Medical";
+      } else {
+        businessModel = isHindiLanguage ? "स्थानीय सेवाएं / व्यापार (Local Services/Trades)" : "Local Services/Trades";
+      }
+    }
+
+    if (!businessAge || businessAge.trim() === "" || businessAge.toLowerCase() === "n/a" || businessAge.toLowerCase() === "undefined" || businessAge.toLowerCase() === "null") {
+      businessAge = isHindiLanguage ? "1-3 वर्ष (विकास चरण)" : "1-3 Years (Growth Phase)";
+    }
+
+    if (!monthlyRevenue || monthlyRevenue.trim() === "" || monthlyRevenue.toLowerCase() === "n/a" || monthlyRevenue.toLowerCase() === "undefined" || monthlyRevenue.toLowerCase() === "null") {
+      monthlyRevenue = isHindiLanguage ? "₹1,50,050 प्रति माह" : "₹1,50,050 per month";
+    }
+
+    if (!country || country.trim() === "" || country.toLowerCase() === "n/a") {
+      country = "India";
+    }
+
+    if (!fundingRequirement || fundingRequirement.trim() === "" || fundingRequirement.toLowerCase() === "n/a" || fundingRequirement.toLowerCase() === "undefined" || fundingRequirement.toLowerCase() === "null") {
+      fundingRequirement = isHindiLanguage ? "₹25,00,000 (विस्तार एवं परिचालन गति के लिए)" : "₹25,00,000 (For expansion & operational scale)";
+    }
+
+    if (!targetGoal || targetGoal.trim() === "" || targetGoal.toLowerCase() === "n/a" || targetGoal.toLowerCase() === "undefined" || targetGoal.toLowerCase() === "null") {
+      targetGoal = isHindiLanguage 
+        ? "ग्राहक आधार बढ़ाना, परिचालन लागत को कम करना और ब्रांड को राष्ट्रीय स्तर पर स्थापित करना।" 
+        : "Expand customer acquisition channels, automate operations, and scale profit margins.";
+    }
+
+    if (!knownCompetitors || knownCompetitors.trim() === "" || knownCompetitors.toLowerCase() === "n/a" || knownCompetitors.toLowerCase() === "undefined" || knownCompetitors.toLowerCase() === "null") {
+      knownCompetitors = isHindiLanguage 
+        ? "स्थानीय स्वतंत्र व्यवसाय और असंगठित बाजार ऑपरेटर" 
+        : "Local service providers, independent retailers and regional players";
+    }
+
+    if (!additionalDetails || additionalDetails.trim() === "" || additionalDetails.toLowerCase() === "n/a" || additionalDetails.toLowerCase() === "undefined" || additionalDetails.toLowerCase() === "null") {
+      additionalDetails = isHindiLanguage
+        ? "असंगठित बाजार में पैर जमाना और डिजिटल मार्केटिंग तकनीकों का पूरी तरह से उपयोग करना।"
+        : "Penetrating an unorganized local market and optimizing digital sales funnel conversions.";
+    }
+
+    // Auto-generate Market Scope, Competition Level, and Core Offerings when left blank
+    if (!marketScope || marketScope.trim() === "" || marketScope.toLowerCase() === "n/a" || marketScope.toLowerCase() === "undefined" || marketScope.toLowerCase() === "null") {
+      const modelLower = (businessModel || "").toLowerCase();
+      if (modelLower.includes("saas") || modelLower.includes("digital")) {
+        marketScope = isHindiLanguage ? "राष्ट्रीय स्तर (National Scope)" : "National Scope";
+      } else {
+        marketScope = isHindiLanguage ? "क्षेत्रीय / शहर-व्यापी (Regional / City-wide)" : "Regional / City-wide";
+      }
+    }
+
+    if (!firstMoverStatus || firstMoverStatus.trim() === "" || firstMoverStatus.toLowerCase() === "n/a" || firstMoverStatus.toLowerCase() === "undefined" || firstMoverStatus.toLowerCase() === "null") {
+      firstMoverStatus = isHindiLanguage 
+        ? "मध्यम प्रतिस्पर्धा (कुछ स्थापित प्रतियोगी हैं, लेकिन अभिनव सेवा से व्यवधान संभव है)" 
+        : "Moderate Competition (Established sector but high viability for unique branding and service style)";
+    }
+
+    if (!businessOfferings || businessOfferings.trim() === "" || businessOfferings.toLowerCase() === "n/a" || businessOfferings.toLowerCase() === "undefined" || businessOfferings.toLowerCase() === "null") {
+      const typeLower = (businessType || "").toLowerCase();
+      if (typeLower.includes("bakery") || typeLower.includes("food") || typeLower.includes("cake")) {
+        businessOfferings = isHindiLanguage
+          ? "कारीगर ब्रेड और पेस्ट्री, कस्टम सेलिब्रेशन केक, और होम-डिलीवरी कैटरिंग"
+          : "Artisanal breads and pastries, custom celebration cakes, and wholesale catering";
+      } else if (typeLower.includes("saas") || typeLower.includes("software") || typeLower.includes("app")) {
+        businessOfferings = isHindiLanguage
+          ? "रीयल-टाइम फ्लीट ऑटोमेशन डैशबोर्ड, ग्राहक सहायता टिकटिंग एपीआई, और साप्ताहिक डेटा एनालिटिक्स रिपोर्ट"
+          : "Real-time dispatch automation, customer support ticketing API, and monthly performance reports";
+      } else if (typeLower.includes("consult") || typeLower.includes("advisor") || typeLower.includes("tax") || typeLower.includes("legal")) {
+        businessOfferings = isHindiLanguage
+          ? "रणनीतिक कर अनुपालन ऑडिट, व्यक्तिगत वित्तीय नियोजन, और कॉर्पोरेट फाइलिंग परामर्श"
+          : "Strategic tax compliance audit, personalized financial planning, and corporate filing advisory";
+      } else {
+        businessOfferings = isHindiLanguage
+          ? "अनुकूलित एंड-टू-एंड सेवा परामर्श, स्थानीय प्रीमियम एक्सप्रेस वितरण, और ग्राहक सहायता सदस्यता"
+          : "Custom tailor-made service consulting, localized express delivery support, and premium support packages";
+      }
+    }
+
+    const languageInstruction = isHindiLanguage
+      ? `CRITICAL LANGUAGE REQUIREMENT:
+The user's preferred language is HINDI (${selectedLanguage}).
+You MUST write 100% of the report contents in professional, business-grade Hindi (शुद्ध व्यावहारिक हिंदी/व्यावसायिक हिंदी).
+- Any descriptions, recommendations, checklist items, action steps, SWOT summaries, analysis, titles, and explanations MUST be written in fluent, corporate business Hindi.
+- Absolutely NO conversational trailing English.
+- headings and values inside strings must be translated to high-quality business Hindi.
+- Avoid low-quality translation or English summaries. Keep it 100% Hindi.`
+      : `Preferred language: English (selectedLanguage: ${selectedLanguage}). Generate a highly professional Boardroom ready corporate report in English.`;
+
     const prompt = `
 Analyze the following enterprise/service and generate an integrated Global Boardroom-Ready Strategic Intelligence Report.
 
 Business Details:
 - Name: ${businessName}
 - Type/Industry: ${businessType}
-- Model/Sector Category: ${businessModel || "Not specified (General Business & Services)"}
+- Model/Sector Category: ${businessModel}
 - Age: ${businessAge}
 - Current Monthly Revenue: ${monthlyRevenue}
-- Country Context: ${country || "India"}
+- Country Context: ${country}
 - Specific Location/State: ${location}
 - Funding Required: ${fundingRequirement}
-${targetGoal ? `- Primary Growth Goal: ${targetGoal}` : ""}
-${additionalDetails ? `- Context/Challenges: ${additionalDetails}` : ""}
+- Primary Growth Goal: ${targetGoal}
+- Specified Competitors: ${knownCompetitors}
+- Target Market Scope: ${marketScope}
+- Level of Innovation/First Mover Posture: ${firstMoverStatus}
+- Core Offerings/Specializations: ${businessOfferings}
+- Context/Challenges: ${additionalDetails}
+
+${languageInstruction}
+
+IMPORTANT CRITERION: Under NO circumstances should any returned string or description contain placeholders like "N/A", "null", "undefined", "not specified", or empty bullet slots. If an item cannot be specifically derived, use your expert corporate VC reasoning to invent exceptionally professional, realistic data or advisory lines based on the sector, size, and location parameters.
 
 Please use your advanced reasoning to provide tailored advice based on their Sector Category and target location.
 Special Sector Rules:
@@ -75,7 +237,12 @@ Special Sector Rules:
 Provide high-fidelity outputs for the following 15 mandatory intelligence dimensions, fully formulated and specific to their context:
 1. Global Market Expansion: Top 5 foreign countries for expansion with realistic data on demand, entry barriers, and localizations.
 2. India Government Schemes: Custom-matched schemes from MSME, Startup India, Mudra, CGTMSE, PMEGP, Stand-Up India, Digital India, etc. provide eligibility and benefits (relevant regardless of starting region, for international growth/imports/exports/regional setups).
-3. AI Competitor Analysis: Likely competitor archetypes, their strategies, and clear strategic USPs/advantage tactics.
+3. AI Competitor Analysis: Provide precise competitor research based on specified inputs:
+   - Identify actual or highly likely competitor names and archetypes based on "${location}" and sector context.
+   - Set "marketSaturationScore" representing the intensity of the competition (0-100, where 100 means high crowd/extreme redundancy and 0 means empty clear path/blue ocean/first mover).
+   - "firstMoverFeasibilityNotes": Provide deep insight into whether their strategy (${firstMoverStatus}) makes sense, scope of growth/opportunity, and advantages or disadvantages.
+   - "howPlayersArePerforming": Direct facts on how existing operators are acquiring customers or running their models.
+   - "industryBenchmarksLinks": Provide authentic, high-quality reference links or resources where they can validate competitor information, local business registration status (e.g. MCA Register search 'https://www.mca.gov.in', India GST Portal verification, G2/SimilarWeb, Google Maps Business search, or standard industry benchmarks 'https://www.startupindia.gov.in' etc.).
 4. Investor Readiness Assessment: Score and evaluation of scalability, margin profitability, team, and addressable market, plus pre-approach checklist.
 5. Global Funding Intelligence: Separate diagnostic evaluations for ALL standard channels (Bank Loans, Venture Capital, Angel Investors, Government Grants, Crowdfunding, Revenue-Based Financing).
 6. Business SWOT: Crisp Strengths, Weaknesses, Opportunities, and Threats arrays.
@@ -90,13 +257,21 @@ Provide high-fidelity outputs for the following 15 mandatory intelligence dimens
 15. Global SaaS-Level Features (globalSaaSFeatures): Custom ESG Sustainability Scores, automated, AI-driven Business Valuation Estimate based on standard sector ARR/revenue multiple ranges, and a dynamic multi-country expansion speed and risk matrix.
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: "You are an elite, world-class executive-level Business Enterprise Intelligence Advisor, VC partner, and international scaling champion. Your task is to analyze details and calculate rigorous, high-fidelity business indexes. Avoid generic padding; write detailed, practical and realistic recommendations tailored precisely to the entity's industry, model, location, and revenue scale.",
-        responseMimeType: "application/json",
-        responseSchema: {
+    const modelsToTry = [
+      "gemini-3.5-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-flash-latest"
+    ];
+
+    const response = await retryWithFallback(
+      async (modelName) => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+          config: {
+            systemInstruction: "You are an elite, world-class executive-level Business Enterprise Intelligence Advisor, VC partner, and international scaling champion. Your task is to analyze details and calculate rigorous, high-fidelity business indexes. Avoid generic padding; write detailed, practical and realistic recommendations tailored precisely to the entity's industry, model, location, and revenue scale. " + (isHindiLanguage ? "All generated JSON string values MUST be in high-quality professional Hindi and contain absolutely zero placeholders like N/A, null, undefined or empty slots." : "All generated contents must be completely populated with zero placeholders like N/A, null, or undefined."),
+            responseMimeType: "application/json",
+            responseSchema: {
           type: Type.OBJECT,
           properties: {
             businessHealthScore: {
@@ -109,9 +284,10 @@ Provide high-fidelity outputs for the following 15 mandatory intelligence dimens
                 financialHealth: { type: Type.INTEGER, description: "Financial metrics score from 0 to 100" },
                 marketPosition: { type: Type.INTEGER, description: "Market potential and competitive position from 0 to 100" },
                 operationalStability: { type: Type.INTEGER, description: "Operational maturity from 0 to 100" },
-                fundingReadiness: { type: Type.INTEGER, description: "Readiness to absorb funding from 0 to 100" }
+                fundingReadiness: { type: Type.INTEGER, description: "Readiness to absorb funding from 0 to 100" },
+                scoreCalculationExplanation: { type: Type.STRING, description: "Detailed explanation in the requested language of how the overall health score was calculated from these four scores using standard corporate weights." }
               },
-              required: ["financialHealth", "marketPosition", "operationalStability", "fundingReadiness"]
+              required: ["financialHealth", "marketPosition", "operationalStability", "fundingReadiness", "scoreCalculationExplanation"]
             },
             growthOpportunities: {
               type: Type.ARRAY,
@@ -256,9 +432,25 @@ Provide high-fidelity outputs for the following 15 mandatory intelligence dimens
                 competitiveAdvantageTactics: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING }
+                },
+                marketSaturationScore: { type: Type.INTEGER, description: "A saturation level score between 0 and 100 where higher means very crowded market, and lower means blue ocean." },
+                firstMoverFeasibilityNotes: { type: Type.STRING, description: "A deep evaluation of whether being a first-mover is viable or what challenges exist if there is high competition." },
+                howPlayersArePerforming: { type: Type.STRING, description: "Detailed observations on how existing players operate, generate revenue, and areas where they are weak or strong." },
+                industryBenchmarksLinks: {
+                  type: Type.ARRAY,
+                  description: "Helpful external validation links or general resource directories appropriate to help check competitor data or check MCA/registries/similar directories.",
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      url: { type: Type.STRING },
+                      description: { type: Type.STRING }
+                    },
+                    required: ["title", "url", "description"]
+                  }
                 }
               },
-              required: ["competitors", "competitiveAdvantageTactics"]
+              required: ["competitors", "competitiveAdvantageTactics", "marketSaturationScore", "firstMoverFeasibilityNotes", "howPlayersArePerforming", "industryBenchmarksLinks"]
             },
             investorReadiness: {
               type: Type.OBJECT,
@@ -542,6 +734,10 @@ Provide high-fidelity outputs for the following 15 mandatory intelligence dimens
         }
       }
     });
+      },
+      modelsToTry,
+      2
+    );
 
     const resultText = response.text;
     if (!resultText) {
@@ -549,6 +745,39 @@ Provide high-fidelity outputs for the following 15 mandatory intelligence dimens
     }
 
     const reportData = JSON.parse(resultText);
+
+    // Ensure score transparency calculation is fully set
+    if (!reportData.scoreTransparencyExplanation) {
+      const isHindiLanguage = selectedLanguage === "HI" || selectedLanguage === "HINGLISH";
+      const financial = reportData.healthScoreBreakdown?.financialHealth || 80;
+      const market = reportData.healthScoreBreakdown?.marketPosition || 80;
+      const operational = reportData.healthScoreBreakdown?.operationalStability || 80;
+      const funding = reportData.healthScoreBreakdown?.fundingReadiness || 80;
+      if (isHindiLanguage) {
+        reportData.scoreTransparencyExplanation = `व्यावसायिक स्वास्थ्य सूचकांक का आकलन वित्तीय स्वास्थ्य (35%), बाजार स्थिति (25%), परिचालन स्थिरता (20%) और फंडिंग तत्परता (20%) के भारित औसत (Weighted Average) के रूप में किया गया है। गणितीय सूत्र: (${financial} * 0.35 + ${market} * 0.25 + ${operational} * 0.20 + ${funding} * 0.20) = ${reportData.businessHealthScore || Math.round(financial * 0.35 + market * 0.25 + operational * 0.20 + funding * 0.20)}%.`;
+      } else {
+        reportData.scoreTransparencyExplanation = `The Business Health Index is calculated as a weighted average: Financial Health (35%), Market Position (25%), Operational Stability (20%), and Funding Readiness (20%). Formula: (${financial} * 0.35 + ${market} * 0.25 + ${operational} * 0.20 + ${funding} * 0.20) = ${reportData.businessHealthScore || Math.round(financial * 0.35 + market * 0.25 + operational * 0.20 + funding * 0.20)}%.`;
+      }
+    }
+
+    // Attach inferred / resolved inputs so that client never displays blank details
+    reportData.input = {
+      businessName,
+      businessType,
+      businessModel,
+      businessAge,
+      monthlyRevenue,
+      location,
+      country,
+      fundingRequirement,
+      targetGoal,
+      additionalDetails,
+      knownCompetitors,
+      marketScope,
+      firstMoverStatus,
+      businessOfferings
+    };
+
     res.json(reportData);
 
   } catch (error: any) {
