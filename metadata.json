@@ -1,0 +1,6 @@
+{
+  "name": "Global Enterprise Intelligence Platform",
+  "description": "An AI-powered boardroom-grade intelligence suite that coordinates global expansion, competitor indexing, compliance auditing, investor readiness, and simulated multi-month revenue forecasts via Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
